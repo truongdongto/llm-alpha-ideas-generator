@@ -5,26 +5,12 @@ Responsibility: turn an alpha expression STRING (e.g.
     "rank(ts_delta(close, 5) / ts_std(returns, 20))"
 ) into an AST (Abstract Syntax Tree) of plain Python objects.
 
-This module knows NOTHING about pandas/numpy or how to actually compute
-anything -- it only knows grammar. That separation matters: it means an
-LLM (in Module 3, later) only ever needs to produce a *string* in this
-grammar, and this parser's job is just to validate that the string is
-syntactically well-formed and turn it into a structure the evaluator
-(dsl/evaluator.py) can walk.
-
 Grammar supported:
-    - arithmetic:      + - * /  and unary minus
-    - numeric literals: 3, 5, 0.5, 20
+    - arithmetic:                + - * /  and unary minus
+    - numeric literals:          3, 5, 0.5, 20
     - identifiers (data fields): close, open, high, low, volume, returns, vwap, adv20
-    - function calls:  name(arg1, arg2, ...)
+    - function calls:            name(arg1, arg2, ...)
     - parentheses for grouping
-
-We use `lark` (an off-the-shelf parser library) to build the parse tree,
-then walk it with a lark Transformer to produce our own lightweight AST
-node classes (Number, Field, FuncCall, BinOp, UnaryNeg). Using our own
-node classes (rather than passing lark's raw tree downstream) keeps the
-evaluator decoupled from lark -- if we ever swap parser libraries, only
-this file changes.
 """
 
 from __future__ import annotations
@@ -141,10 +127,6 @@ class AlphaExpressionSyntaxError(ValueError):
 def parse_expression(expr_str: str):
     """
     Parse an alpha expression string into an AST.
-
-    Raises AlphaExpressionSyntaxError with a readable message if the
-    string is not valid -- this is the boundary where malformed LLM
-    output should get caught, before it ever touches real computation.
     """
     try:
         tree = _parser.parse(expr_str)
@@ -168,7 +150,7 @@ if __name__ == "__main__":
         ast = parse_expression(e)
         print(f"{e!r:60s} -> {ast}")
 
-    # a deliberately broken expression to confirm error handling works
+    # confirm error handling works
     try:
         parse_expression("rank(open - (sum(vwap, 10) / 10)) * -1 * abs(rank(close - vwap))")
     except AlphaExpressionSyntaxError as e:

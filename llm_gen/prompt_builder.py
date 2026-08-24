@@ -2,15 +2,6 @@
 llm_gen/prompt_builder.py
 ==========================
 Builds the system + user prompt sent to the LLM each round.
-
-Key design decision: the list of available fields/operators is pulled
-DIRECTLY from dsl.evaluator's operator registries and data_layer's field
-list, not hand-copied into a prompt string. If someone adds a new
-operator to the DSL later, the prompt updates automatically -- there's
-no separate "prompt documentation" that can silently drift out of sync
-with what the grammar actually accepts (a very easy bug to introduce
-otherwise: LLM keeps suggesting an operator you removed, or never learns
-about one you added).
 """
 from __future__ import annotations
 

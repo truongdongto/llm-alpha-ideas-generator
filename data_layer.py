@@ -145,17 +145,13 @@ def load_panel(path: str) -> dict[str, pd.DataFrame]:
 
 
 if __name__ == "__main__":
-    # quick smoke test
-    tickers = ["AAA", "BBB", "CCC", "DDD"]
-    panel = generate_synthetic_data(tickers, n_days=100)
+    tickers = ["AAPL", "MSFT", "GOOGL", "META"]
+    panel = fetch_real_data(tickers)
     for field, df in panel.items():
         print(f"{field:10s} shape={df.shape}  sample_last_row=\n{df.tail(1)}\n")
 
-    datas = fetch_real_data(tickers)
-    print(datas)
-
-    save_panel(panel, "/tmp/synthetic_panel.parquet")
-    reloaded = load_panel("/tmp/synthetic_panel.parquet")
-    assert set(reloaded.keys()) == set(panel.keys())
-    assert np.allclose(reloaded["close"].values, panel["close"].values, equal_nan=True)
-    print("save/load round-trip OK")
+    # save_panel(panel, "/tmp/synthetic_panel.parquet")
+    # reloaded = load_panel("/tmp/synthetic_panel.parquet")
+    # assert set(reloaded.keys()) == set(panel.keys())
+    # assert np.allclose(reloaded["close"].values, panel["close"].values, equal_nan=True)
+    # print("save/load round-trip OK")

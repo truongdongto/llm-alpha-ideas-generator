@@ -1,47 +1,8 @@
 """
 ppo_finetune.py
 ================
-RL fine-tuning of the Qwen policy using PPO (via the `trl` library), so
-the model learns -- through actual gradient updates, not just in-context
-prompting -- to propose alpha expressions that score well on the
-backtest engine's reward.
-
-*** NOT EXECUTABLE IN THIS SANDBOX ***
-Same constraint as llm_gen/qwen_generator.py: no huggingface.co access
-and no GPU here. This file is syntax-checked (py_compile) only. Run it
-on your own machine with:
-    pip install torch transformers trl peft accelerate
-    # a CUDA GPU with >=16GB VRAM is realistic for a 7B model with PEFT/LoRA;
-    # for less VRAM, use Qwen2.5-1.5B-Instruct or Qwen2.5-3B-Instruct instead.
-
-DESIGN NOTES (why this looks the way it does):
-
-1. One idea per completion, not a JSON batch.
-   The in-context loop (orchestrate.py) asks for N ideas per LLM call
-   because that's efficient for API-based/inference-only usage. PPO
-   needs one scalar reward per (query, response) pair, so here each
-   training example asks for exactly ONE alpha expression -- this
-   removes any ambiguity about which part of a multi-idea completion a
-   given reward should attribute to.
-
-2. Reward = the SAME compute_reward() used everywhere else.
-   The whole point of building llm_gen/reward.py as a standalone,
-   pure function was so the metric used to rank alphas on the
-   leaderboard is EXACTLY the metric the policy gets optimized against.
-   If these two diverged, PPO could learn to game a proxy reward that
-   doesn't match what you actually screen alphas by.
-
-3. No diversity penalty during PPO (diversity_max_corr is fixed at 0
-   here), unlike orchestrate.py's in-context loop. Diversity-vs-pool is
-   a moving target across a training run (the "pool" would have to be
-   the policy's own recent outputs, updated online) -- a reasonable
-   extension, but left out here to keep the core PPO loop legible. See
-   the TODO in `compute_ppo_reward` for how you'd wire it in.
-
-4. LoRA/PEFT is recommended but not hardwired in -- see `use_lora` flag.
-   Full fine-tuning of a 7B model's value head + policy is expensive;
-   LoRA cuts trainable parameters dramatically with little quality loss
-   for this kind of narrow, structured-output task.
+RL fine-tuning of the Qwen policy using PPO, the model learns
+through actual gradient updates, not just in-context prompting
 """
 
 from __future__ import annotations
@@ -55,7 +16,7 @@ from backtest.engine import backtest_alpha
 from llm_gen.base import parse_single_llm_output
 from llm_gen.prompt_builder import build_system_prompt
 from llm_gen.reward import compute_reward, DEFAULT_WEIGHTS
-from data_layer import generate_synthetic_data  # swap for fetch_real_data(...) for real training
+from data_layer import generate_synthetic_data, fetch_real_data
 
 
 SINGLE_IDEA_USER_PROMPT = (
@@ -98,7 +59,7 @@ def compute_ppo_reward(expression: str | None, panel: dict) -> float:
 
 
 def main(
-    model_name: str = "Qwen/Qwen2.5-7B-Instruct",
+    model_name: str = "Qwen/Qwen3-4B-Instruct-2507",
     n_steps: int = 200,
     batch_size: int = 8,
     learning_rate: float = 1.4e-5,
@@ -118,8 +79,6 @@ def main(
             task_type="CAUSAL_LM",
         )
 
-    # AutoModelForCausalLMWithValueHead wraps the base causal LM with an
-    # extra scalar "value head" PPO needs to estimate expected future reward
     policy_model = AutoModelForCausalLMWithValueHead.from_pretrained(
         model_name, peft_config=peft_config, torch_dtype=torch.bfloat16,
     ).to(device)
@@ -149,17 +108,13 @@ def main(
     generation_kwargs = {
         "min_length": -1,
         "top_p": 0.9,
-        "temperature": 0.9,      # relatively high: PPO needs sampling diversity
+        "temperature": 0.9,
         "do_sample": True,
         "pad_token_id": tokenizer.eos_token_id,
-        "max_new_tokens": 200,   # a single expression is short; no need for 1024 tokens
+        "max_new_tokens": 200,
     }
 
     for step in range(n_steps):
-        # every training example in this simple loop reuses the same
-        # static prompt -- diversity comes from sampling temperature, not
-        # from varying the prompt. A fancier version could rotate through
-        # several prompt variants (different economic-rationale hints) per batch.
         query_tensors = [query_tensor for _ in range(batch_size)]
 
         response_tensors = ppo_trainer.generate(

@@ -1,10 +1,6 @@
 """
 dsl/evaluator.py
 ================
-Responsibility: walk an AST (from dsl/parser.py) and actually COMPUTE it,
-using panel data (dict[str, pd.DataFrame], shape date x ticker) as the
-source of field values.
-
 This is where the alpha operators live. Two families:
 
   Cross-sectional operators (operate ACROSS tickers, on a single date):
@@ -25,10 +21,6 @@ This is where the alpha operators live. Two families:
 
   Elementwise:
       log(x), abs(x), sign(x)
-
-Every operator returns a DataFrame of the SAME shape (date x ticker) as
-its input, which is what lets these compose arbitrarily -- this is the
-same design principle behind WorldQuant's Fast Expression language.
 """
 
 from __future__ import annotations
@@ -41,7 +33,7 @@ from .parser import Number, Field, FuncCall, BinOp, UnaryNeg, parse_expression
 class AlphaEvaluationError(ValueError):
     """Raised for semantic errors: unknown field, wrong arg count, etc."""
 
-
+    
 # ---------------------------------------------------------------------------
 # Operator implementations
 # ---------------------------------------------------------------------------
