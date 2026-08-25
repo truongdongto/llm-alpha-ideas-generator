@@ -1,16 +1,13 @@
 """
 dsl/parser.py
 =============
-Responsibility: turn an alpha expression STRING (e.g.
-    "rank(ts_delta(close, 5) / ts_std(returns, 20))"
-) into an AST (Abstract Syntax Tree) of plain Python objects.
+Grammar extended to match WorldQuant BRAIN's expression syntax:
+  - keyword args:      rank(x, rate=2), scale(x, scale=1, longscale=1)
+  - comparison ops:    x < y, x >= y, x == y  (return 1.0/0.0)
+  - boolean literals:  true / false (used as kwarg values, e.g. filter=true)
+  - n-ary functions:   add(x, y, z), max(x, y, z, ...)
 
-Grammar supported:
-    - arithmetic:                + - * /  and unary minus
-    - numeric literals:          3, 5, 0.5, 20
-    - identifiers (data fields): close, open, high, low, volume, returns, vwap, adv20
-    - function calls:            name(arg1, arg2, ...)
-    - parentheses for grouping
+Grammar precedence (loosest to tightest): comparison > +/- > * / > unary neg.
 """
 
 from __future__ import annotations
@@ -28,6 +25,11 @@ class Number:
 
 
 @dataclass(frozen=True)
+class Boolean:
+    value: bool
+
+
+@dataclass(frozen=True)
 class Field:
     name: str
 
@@ -35,12 +37,13 @@ class Field:
 @dataclass(frozen=True)
 class FuncCall:
     name: str
-    args: tuple  # tuple of AST nodes
+    pos_args: tuple            # positional AST nodes
+    kwargs: dict                # name -> Number | Boolean AST node
 
 
 @dataclass(frozen=True)
 class BinOp:
-    op: str          # '+', '-', '*', '/'
+    op: str          # + - * / < <= > >= == !=
     left: object
     right: object
 
@@ -57,9 +60,20 @@ class UnaryNeg:
 _GRAMMAR = r"""
     ?start: expr
 
-    ?expr: expr "+" term   -> add
-         | expr "-" term   -> sub
-         | term
+    ?expr: comparison "?" expr ":" expr -> ternary
+         | comparison
+
+    ?comparison: comparison "<"  add_expr -> lt
+               | comparison "<=" add_expr -> le
+               | comparison ">"  add_expr -> gt
+               | comparison ">=" add_expr -> ge
+               | comparison "==" add_expr -> eq
+               | comparison "!=" add_expr -> ne
+               | add_expr
+
+    ?add_expr: add_expr "+" term -> add
+             | add_expr "-" term -> sub
+             | term
 
     ?term: term "*" factor -> mul
          | term "/" factor -> div
@@ -69,13 +83,22 @@ _GRAMMAR = r"""
            | atom
 
     ?atom: NUMBER                  -> number
+         | TRUE                    -> true_lit
+         | FALSE                   -> false_lit
          | NAME "(" args ")"       -> func_call
          | NAME                    -> field
          | "(" expr ")"
 
-    args: expr ("," expr)*
+    args: (arg ("," arg)*)?
+    ?arg: NAME "=" value  -> kwarg
+        | expr            -> posarg
+    ?value: NUMBER -> number
+          | TRUE -> true_lit
+          | FALSE -> false_lit
 
     NAME: /[a-zA-Z_][a-zA-Z0-9_]*/
+    TRUE.2: "true"
+    FALSE.2: "false"
     %import common.NUMBER
     %import common.WS
     %ignore WS
@@ -84,74 +107,84 @@ _GRAMMAR = r"""
 
 @v_args(inline=True)
 class _ASTBuilder(Transformer):
-    """Walks the lark parse tree and builds our AST node classes."""
-
     def number(self, tok):
         return Number(float(tok))
+
+    def true_lit(self, tok=None):
+        return Boolean(True)
+
+    def false_lit(self, tok=None):
+        return Boolean(False)
 
     def field(self, name_tok):
         return Field(str(name_tok))
 
+    def posarg(self, node):
+        return ("pos", node)
+
+    def kwarg(self, name_tok, value_node):
+        return ("kw", str(name_tok), value_node)
+
+    def args(self, *items):
+        return list(items)
+
     def func_call(self, name_tok, args_list):
-        # by the time this runs, the `args` rule has already been
-        # transformed (bottom-up) into a plain Python list
-        return FuncCall(str(name_tok), tuple(args_list))
+        pos_args = tuple(item[1] for item in args_list if item[0] == "pos")
+        kwargs = {item[1]: item[2] for item in args_list if item[0] == "kw"}
+        return FuncCall(str(name_tok), pos_args, kwargs)
 
-    def args(self, *children):
-        return list(children)
+    def add(self, l, r): return BinOp("+", l, r)
+    def sub(self, l, r): return BinOp("-", l, r)
+    def mul(self, l, r): return BinOp("*", l, r)
+    def div(self, l, r): return BinOp("/", l, r)
+    def lt(self, l, r): return BinOp("<", l, r)
+    def le(self, l, r): return BinOp("<=", l, r)
+    def gt(self, l, r): return BinOp(">", l, r)
+    def ge(self, l, r): return BinOp(">=", l, r)
+    def eq(self, l, r): return BinOp("==", l, r)
+    def ne(self, l, r): return BinOp("!=", l, r)
+    def neg(self, operand): return UnaryNeg(operand)
 
-    def add(self, l, r):
-        return BinOp("+", l, r)
-
-    def sub(self, l, r):
-        return BinOp("-", l, r)
-
-    def mul(self, l, r):
-        return BinOp("*", l, r)
-
-    def div(self, l, r):
-        return BinOp("/", l, r)
-
-    def neg(self, operand):
-        return UnaryNeg(operand)
+    def ternary(self, cond, true_val, false_val):
+        # "cond ? a : b" is sugar for if_else(cond, a, b) -- reuse the same
+        # FuncCall representation so no new evaluator logic is needed.
+        return FuncCall("if_else", (cond, true_val, false_val), {})
 
 
-_parser = Lark(_GRAMMAR, parser="lalr", transformer=None)
+_parser = Lark(_GRAMMAR, parser="lalr")
 _builder = _ASTBuilder()
 
 
 class AlphaExpressionSyntaxError(ValueError):
-    """Raised when an expression string doesn't match the DSL grammar."""
+    pass
 
 
 def parse_expression(expr_str: str):
-    """
-    Parse an alpha expression string into an AST.
-    """
     try:
         tree = _parser.parse(expr_str)
     except UnexpectedInput as e:
-        raise AlphaExpressionSyntaxError(
-            f"Could not parse expression {expr_str!r}: {e}"
-        ) from e
+        raise AlphaExpressionSyntaxError(f"Could not parse expression {expr_str!r}: {e}") from e
     return _builder.transform(tree)
 
 
 if __name__ == "__main__":
     examples = [
         "close",
-        "rank(close)",
-        "ts_delta(close, 5)",
-        "rank(ts_delta(close, 5) / ts_std(returns, 20))",
-        "-rank(close - open) * 2",
-        "ts_corr(volume, close, 10) + 0.5",
+        "rank(close, rate=2)",
+        "add(close, open, filter=true)",
+        "scale(close, scale=1, longscale=2, shortscale=1)",
+        "if_else(close > open, 1, -1)",
+        "and(close > open, volume > adv20)",
+        "ts_backfill(close, lookback=20, k=1)",
+        "winsorize(returns, std=3)",
+        "close != open",
+        "not(close < open)",
     ]
     for e in examples:
         ast = parse_expression(e)
-        print(f"{e!r:60s} -> {ast}")
+        print(f"{e!r:55s} -> {ast}")
 
-    # confirm error handling works
     try:
-        parse_expression("rank(open - (sum(vwap, 10) / 10)) * -1 * abs(rank(close - vwap))")
+        parse_expression("rank(close, unknown_kwarg_syntax=)")
     except AlphaExpressionSyntaxError as e:
         print(f"\nExpected syntax error caught OK: {e}")

@@ -1,24 +1,22 @@
 """
 llm_gen/prompt_builder.py
 ==========================
-Builds the system + user prompt sent to the LLM each round.
+Builds the system + user prompt. Operator list is pulled directly from
+dsl.operators.REGISTRY (name + description + arg signature), so the
+prompt can never drift from what the DSL actually supports.
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
-
 import pandas as pd
-from dsl.evaluator import (
-    _CROSS_SECTIONAL_UNARY, _TS_UNARY, _ELEMENTWISE_UNARY, _TS_BINARY,
-)
+sys.path.append(str(Path(__file__).parent.parent))
+
+from dsl.operators import REGISTRY
 from data_layer import ALL_FIELDS
 
-SYSTEM_PROMPT_TEMPLATE = """You are a quantitative researcher generating alpha expressions \
-for equity trading, in the style of WorldQuant BRAIN's alpha expression language.
+SYSTEM_PROMPT_TEMPLATE = """You are a quantitative researcher generating alpha factor expressions \
+for equity trading, following WorldQuant BRAIN's alpha expression language.
 
 An "alpha" is a formula computed on daily cross-sectional market data that produces a \
 numeric score per stock per day; stocks with higher scores are expected to have higher \
@@ -28,25 +26,18 @@ AVAILABLE DATA FIELDS (each is a date x ticker matrix):
 {fields}
 
 AVAILABLE OPERATORS:
-Cross-sectional (operate across all tickers on one date):
-{cross_sectional_ops}
-Time-series (operate across the date axis, per ticker):
-{ts_ops}
-Elementwise:
-{elementwise_ops}
+{operators}
 
 RULES:
-- Every expression must be syntactically valid: only the fields and operators listed above, \
-standard arithmetic (+ - * /), and numeric literals for window sizes.
-- Time-series operator window arguments (the "n" in ts_mean(x, n)) must be plain numbers, \
-not expressions.
-- Prefer expressions with a clear economic rationale (momentum, mean-reversion, volume/price \
-divergence, volatility, liquidity, etc.) over arbitrary formulas.
-- Prefer NEW, DIVERSE ideas over ones that are just sign-flips or trivial rescalings of alphas \
-already tried (see feedback below).
+- Only use the fields and operators listed above.
+- Positional args marked (int) must be plain numeric literals (e.g. the "d" in ts_mean(x, d)).
+- Keyword args must use the exact names shown, e.g. rank(x, rate=2), add(x, y, filter=true).
+- Comparisons (x > y, x == y, etc.) and add/subtract/multiply/max/min accept 2+ inputs.
+- Prefer expressions with a clear economic rationale over arbitrary formulas.
+- Prefer NEW, DIVERSE ideas over sign-flips or trivial rescalings of alphas already tried.
 
 OUTPUT FORMAT:
-Respond with ONLY a JSON array, no other text, in this exact shape:
+Respond with ONLY a JSON array, no other text:
 [{{"expression": "rank(ts_delta(close, 5))", "rationale": "short-term momentum"}}, ...]
 """
 
@@ -57,17 +48,22 @@ Respond with the JSON array only.
 """
 
 
-def _format_ops(names: list[str]) -> str:
-    return "\n".join(f"  - {name}" for name in sorted(names))
+def _format_operator_line(name: str) -> str:
+    spec = REGISTRY[name]
+    if spec.arg_types is not None:
+        arg_str = ", ".join(spec.arg_types)
+    else:
+        arg_str = f"data, data, ... (min {spec.min_args})"
+    kwarg_str = ""
+    if spec.kwargs:
+        kwarg_str = ", " + ", ".join(f"{k}={v}" for k, v in spec.kwargs.items())
+    return f"  - {name}({arg_str}{kwarg_str}): {spec.description}"
 
 
 def build_system_prompt() -> str:
-    return SYSTEM_PROMPT_TEMPLATE.format(
-        fields=_format_ops(ALL_FIELDS),
-        cross_sectional_ops=_format_ops(list(_CROSS_SECTIONAL_UNARY)),
-        ts_ops=_format_ops(list(_TS_UNARY) + list(_TS_BINARY)),
-        elementwise_ops=_format_ops(list(_ELEMENTWISE_UNARY)),
-    )
+    op_lines = "\n".join(_format_operator_line(name) for name in sorted(REGISTRY))
+    field_lines = "\n".join(f"  - {f}" for f in sorted(ALL_FIELDS))
+    return SYSTEM_PROMPT_TEMPLATE.format(fields=field_lines, operators=op_lines)
 
 
 def build_feedback_section(

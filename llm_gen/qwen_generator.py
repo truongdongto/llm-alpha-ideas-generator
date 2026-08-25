@@ -13,9 +13,7 @@ you don't have a GPU with enough VRAM for the 7B model.
 from __future__ import annotations
 import sys
 from pathlib import Path
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
+sys.path.append(str(Path(__file__).parent.parent))
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer

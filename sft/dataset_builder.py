@@ -5,7 +5,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 import json
 import random
 
-from sft.worldquant_alphas import WORLDQUANT_101_ALPHAS, THEMES
+from sft.worldquant_alphas import WORLDQUANT_INSPIRED_ALPHAS, THEMES
 from llm_gen.prompt_builder import build_system_prompt
 
 USER_TEMPLATES = [
@@ -17,7 +17,7 @@ USER_TEMPLATES = [
 
 def _format_assistant_json(batch: list[dict]) -> str:
     return json.dumps(
-        [{"expression": a["expression"], "rationale": a["rationale"]} for a in batch],
+        [{"expression": a["expression"], "rationales": a["rationales"]} for a in batch],
         ensure_ascii=False,
     )
 
@@ -25,7 +25,7 @@ def _format_assistant_json(batch: list[dict]) -> str:
 def build_sft_examples(seed: int = 0, min_batch: int = 2, max_batch: int = 5) -> list[dict]:
     """Returns list of {"messages": [...]} chat examples."""
     rng = random.Random(seed)
-    pool = WORLDQUANT_101_ALPHAS.copy()
+    pool = WORLDQUANT_INSPIRED_ALPHAS.copy()
     rng.shuffle(pool)
 
     examples = []
@@ -54,7 +54,7 @@ def build_sft_examples(seed: int = 0, min_batch: int = 2, max_batch: int = 5) ->
 
 if __name__ == "__main__":
     examples = build_sft_examples(seed=42)
-    print(f"Built {len(examples)} SFT examples from {len(WORLDQUANT_101_ALPHAS)} curated alphas")
+    print(f"Built {len(examples)} SFT examples from {len(WORLDQUANT_INSPIRED_ALPHAS)} curated alphas")
     print(f"Themes: {THEMES}")
     print("\nSample example:")
     print(json.dumps(examples[0], ensure_ascii=False, indent=2))

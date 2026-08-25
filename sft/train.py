@@ -21,9 +21,9 @@ def build_and_split_dataset(seed: int = 42, val_fraction: float = 0.15):
 
 
 def main(
-    model_name: str = "Qwen/Qwen2.5-Math-1.5B-Instruct",
-    output_dir: str = "./qwen-checkpoint",
-    n_epochs: int = 20,
+    model_name: str = "microsoft/Phi-3.5-mini-instruct",
+    output_dir: str = "./checkpoint",
+    n_epochs: int = 10,
     learning_rate: float = 2e-5,
     use_lora: bool = True,
 ):
@@ -39,7 +39,7 @@ def main(
         quantization_config=bnb_config
     )
     model = prepare_model_for_kbit_training(model)
-    print(f"Loaded {model_name} for QLoRa training.")
+    print(f"Loaded {model_name} for QLoRa training.\n")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -64,17 +64,16 @@ def main(
         output_dir=output_dir,
         num_train_epochs=n_epochs,
         learning_rate=learning_rate,
-        per_device_train_batch_size=4,
-        gradient_accumulation_steps=4,
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=2,
         eval_strategy="steps",
         save_strategy="steps",
         bf16=torch.cuda.is_bf16_supported(),
-        fp16=not torch.cuda.is_bf16_supported(),
         optim="paged_adamw_8bit",
-        logging_steps=100,
+        logging_steps=10,
         max_length=1024,
         packing=False,
-        save_steps=100,
+        save_steps=10,
         save_total_limit=1,
         report_to="none",
         completion_only_loss=True
@@ -88,9 +87,9 @@ def main(
         peft_config=peft_config,
     )
 
-    print("Start training ...")
+    print("Start training ...\n")
     trainer.train()
-    print("Done training!")
+    print("Done training!\n")
     trainer.save_model(output_dir)
     print(f"SFT complete. Checkpoint saved to {output_dir}")
     # Next step: use this checkpoint as the starting model_name in ppo_finetune.py

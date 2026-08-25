@@ -1,11 +1,15 @@
 """
 ppo_finetune.py
 ================
-RL fine-tuning of the Qwen policy using PPO, the model learns
+RL fine-tuning of the model policy using PPO, the model learns
 through actual gradient updates, not just in-context prompting
 """
 
 from __future__ import annotations
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+
 import torch
 from transformers import AutoTokenizer
 from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
@@ -59,12 +63,12 @@ def compute_ppo_reward(expression: str | None, panel: dict) -> float:
 
 
 def main(
-    model_name: str = "Qwen/Qwen3-4B-Instruct-2507",
+    model_name: str,
     n_steps: int = 200,
     batch_size: int = 8,
     learning_rate: float = 1.4e-5,
     use_lora: bool = True,
-    output_dir: str = "./qwen-alpha-ppo-checkpoint",
+    output_dir: str = "./ppo-checkpoint",
 ):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
