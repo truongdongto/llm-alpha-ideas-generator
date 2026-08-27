@@ -62,9 +62,6 @@ import pandas as pd
 def forward_returns(close: pd.DataFrame, horizon: int) -> pd.DataFrame:
     """
     Return realized from t to t+horizon, indexed at t.
-    i.e. forward_returns(close, 1).loc[d] is the % return an investor
-    would earn buying at close[d] and selling at close[d+1].
-    Last `horizon` rows are NaN (no future data available yet).
     """
     return close.shift(-horizon) / close - 1.0
 

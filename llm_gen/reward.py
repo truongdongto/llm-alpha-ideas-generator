@@ -48,7 +48,6 @@ class RewardWeights:
 
 DEFAULT_WEIGHTS = RewardWeights()
 
-
 def compute_reward(
     mean_ic: float | None,
     turnover: float | None,
@@ -56,11 +55,6 @@ def compute_reward(
     valid: bool,
     weights: RewardWeights = DEFAULT_WEIGHTS,
 ) -> float:
-    """
-    valid=False short-circuits to the flat invalid_penalty -- an
-    expression that doesn't even run is always worse than any valid one,
-    regardless of what the other args happen to be.
-    """
     if not valid or mean_ic is None or not np.isfinite(mean_ic):
         return weights.invalid_penalty
 

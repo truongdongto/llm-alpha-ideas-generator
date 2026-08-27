@@ -15,8 +15,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 from dsl.operators import REGISTRY
 from data_layer import ALL_FIELDS
 
-SYSTEM_PROMPT_TEMPLATE = """You are a quantitative researcher generating alpha factor expressions \
-for equity trading, following WorldQuant BRAIN's alpha expression language.
+SYSTEM_PROMPT_TEMPLATE = """You are a world-class Quantitative Financial Researcher specializing in alpha discovery. 
+Your task is to generate high-quality, predictive alpha expressions (signals) for financial markets.
+Focus on mathematical rigor, economic intuition, and cross-sectional or time-series factors.
 
 An "alpha" is a formula computed on daily cross-sectional market data that produces a \
 numeric score per stock per day; stocks with higher scores are expected to have higher \
@@ -41,11 +42,7 @@ Respond with ONLY a JSON array, no other text:
 [{{"expression": "rank(ts_delta(close, 5))", "rationale": "short-term momentum"}}, ...]
 """
 
-USER_PROMPT_TEMPLATE = """Generate {n} new alpha expressions.
-
-{feedback_section}
-Respond with the JSON array only.
-"""
+USER_PROMPT_TEMPLATE = """Generate {n} new alpha expressions. Respond with the JSON array only."""
 
 
 def _format_operator_line(name: str) -> str:
@@ -62,7 +59,7 @@ def _format_operator_line(name: str) -> str:
 
 def build_system_prompt() -> str:
     op_lines = "\n".join(_format_operator_line(name) for name in sorted(REGISTRY))
-    field_lines = "\n".join(f"  - {f}" for f in sorted(ALL_FIELDS))
+    field_lines = "\n".join(f"  - {f}" for f in  sorted(ALL_FIELDS))
     return SYSTEM_PROMPT_TEMPLATE.format(fields=field_lines, operators=op_lines)
 
 
@@ -112,13 +109,9 @@ def build_feedback_section(
     return "\n".join(lines) + "\n"
 
 
-def build_user_prompt(n: int, leaderboard: pd.DataFrame, top_k: int = 5) -> str:
-    feedback = build_feedback_section(leaderboard, top_k=top_k)
-    return USER_PROMPT_TEMPLATE.format(n=n, feedback_section=feedback)
+def build_user_prompt(n: int) -> str:
+    return USER_PROMPT_TEMPLATE.format(n=n)
 
 
 if __name__ == "__main__":
-    print(build_system_prompt())
-    print("-" * 60)
-    empty_leaderboard = pd.DataFrame(columns=["expression", "valid", "reward", "mean_ic", "turnover", "error"])
-    print(build_user_prompt(5, empty_leaderboard))
+    pass

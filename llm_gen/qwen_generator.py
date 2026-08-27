@@ -25,7 +25,7 @@ from llm_gen.prompt_builder import build_system_prompt
 class QwenAlphaGenerator(AlphaIdeaGenerator):
     def __init__(
         self,
-        model_name: str = "Qwen/Qwen2.5-Coder-3B-Instruct",
+        model_name: str,
         max_new_tokens: int = 2048,
         temperature: float = 0.8,
         top_p: float = 0.9,
@@ -87,8 +87,6 @@ class QwenAlphaGenerator(AlphaIdeaGenerator):
 
 
 if __name__ == "__main__":
-    import sys
-    sys.path.insert(0, ".")
     from data_layer import generate_synthetic_data
     from orchestrate import AlphaResearchLoop
 

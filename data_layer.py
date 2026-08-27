@@ -145,11 +145,9 @@ def load_panel(path: str) -> dict[str, pd.DataFrame]:
 
 
 if __name__ == "__main__":
-    tickers = ["AAPL", "MSFT", "GOOGL", "META"]
-    panel = fetch_real_data(tickers)
+    panel = fetch_real_data(tickers=["NFLX", "MS", "DELL", "ARM", "SHEL", "IBM"], end="2025-12-12")
     for field, df in panel.items():
-        print(f"{field:10s} shape={df.shape}  sample_last_row=\n{df.tail(1)}\n")
-
+        print(f"{field:10s} shape={df.shape}  sample_last_row=\n{df.tail(5)}\n")
     # save_panel(panel, "/tmp/synthetic_panel.parquet")
     # reloaded = load_panel("/tmp/synthetic_panel.parquet")
     # assert set(reloaded.keys()) == set(panel.keys())
